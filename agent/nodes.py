@@ -46,6 +46,8 @@ Format:
         "tool_input": params
     }
 
+from pydantic import ValidationError
+
 def execute_tool(state: AgentState) -> dict:
     """
     Executes the appropriate tool based on the classified intent and extracted parameters.
@@ -62,8 +64,11 @@ def execute_tool(state: AgentState) -> dict:
         elif intent == "book":
             output = create_booking.invoke(params)
     except Exception as e:
-        print(f"Tool execution error: {e}")
-        output = json.dumps({"error": str(e)})
+        error_str = str(e).lower()
+        missing = [k for k in ["check_in", "check_out", "location", "guests", "listing_id", "guest_name"] if k in error_str]
+        if not missing:
+            missing = ["check_in", "check_out"] if intent == "search" else ["listing_id"]
+        output = json.dumps({"error": "missing_information", "missing_fields": missing})
         
     return {"tool_output": json.loads(output) if output else {}}
 
@@ -74,9 +79,15 @@ def generate_response(state: AgentState) -> dict:
     intent = state["intent"]
     tool_data = state["tool_output"]
     
-    system_prompt = f"""You are the StayEase Agent. The user's intent was '{intent}'.
-The system has executed a tool and returned this raw data: {json.dumps(tool_data)}
-Write a friendly, helpful natural language response to the user based ONLY on this data. Do not make up information."""
+    system_prompt = f"""You are a friendly and professional human-like concierge agent for StayEase. 
+The user's classified intent is '{intent}'.
+The backend system returned this raw data or error: {json.dumps(tool_data)}
+
+Instructions:
+1. Write a natural, conversational response to the user based on this data.
+2. If the data contains an error about missing fields (like missing dates or location), DO NOT mention "the system", "validation errors", or technical jargon. Simply ask the user naturally for the missing information (e.g., "I'd love to help! Could you let me know what dates you're planning to check in and out?").
+3. Do not make up any property information that isn't provided in the data.
+"""
 
     response = llm.invoke([SystemMessage(content=system_prompt)] + state["messages"])
     
