@@ -1,34 +1,49 @@
 import json
 from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
+from langchain_groq import ChatGroq
 from agent.state import AgentState
 from agent.tools import search_available_properties, get_listing_details, create_booking
+from app.core.config import settings
+import os
 
-# Mock LLM for skeleton - normally we'd import and call Groq here
-def _mock_llm_call(messages: list) -> str:
-    # Basic keyword routing for skeleton simulation
-    last_msg = messages[-1].content.lower()
-    if "search" in last_msg or "find" in last_msg or "room" in last_msg:
-        return json.dumps({"intent": "search", "parameters": {"location": "Cox's Bazar", "check_in": "2026-05-01", "check_out": "2026-05-03", "guests": 2}})
-    elif "detail" in last_msg or "tell me about" in last_msg:
-        return json.dumps({"intent": "details", "parameters": {"listing_id": 1}})
-    elif "book" in last_msg or "reserve" in last_msg:
-        return json.dumps({"intent": "book", "parameters": {"listing_id": 1, "guest_name": "John Doe", "check_in": "2026-05-01", "check_out": "2026-05-03", "guests": 2}})
-    else:
-        return json.dumps({"intent": "escalate", "parameters": {}})
+# Initialize real LLM
+llm = ChatGroq(model="llama-3.3-70b-versatile", api_key=settings.groq_api_key)
 
 def classify_intent(state: AgentState) -> dict:
     """
     Analyzes the user's message using an LLM to determine intent and extract parameters.
     """
     messages = state["messages"]
-    # In a real app: response = llm.invoke([SystemMessage(content="Classify intent into: search, details, book, escalate")] + messages)
     
-    response_json = _mock_llm_call(messages)
-    data = json.loads(response_json)
+    system_prompt = """You are an intent classification routing agent for StayEase.
+Classify the user's latest message into one of these intents:
+1. 'search': User wants to find properties based on location, dates, and guests.
+2. 'details': User wants more info about a specific listing (needs a listing ID).
+3. 'book': User wants to book a listing.
+4. 'escalate': User asks something outside these bounds.
+
+Respond ONLY with a JSON object. No markdown formatting, no other text.
+Format:
+{
+  "intent": "search" | "details" | "book" | "escalate",
+  "parameters": {} // Include extracted keys like location, check_in, check_out, guests, listing_id, guest_name if applicable. Leave empty if none.
+}
+"""
+    response = llm.invoke([SystemMessage(content=system_prompt)] + messages)
+    
+    try:
+        content = response.content.replace("```json", "").replace("```", "").strip()
+        data = json.loads(content)
+        intent = data.get("intent", "escalate")
+        params = data.get("parameters", {})
+    except Exception as e:
+        print("Error parsing LLM response:", response.content)
+        intent = "escalate"
+        params = {}
     
     return {
-        "intent": data["intent"],
-        "tool_input": data.get("parameters", {})
+        "intent": intent,
+        "tool_input": params
     }
 
 def execute_tool(state: AgentState) -> dict:
@@ -39,12 +54,16 @@ def execute_tool(state: AgentState) -> dict:
     params = state["tool_input"]
     
     output = None
-    if intent == "search":
-        output = search_available_properties.invoke(params)
-    elif intent == "details":
-        output = get_listing_details.invoke(params)
-    elif intent == "book":
-        output = create_booking.invoke(params)
+    try:
+        if intent == "search":
+            output = search_available_properties.invoke(params)
+        elif intent == "details":
+            output = get_listing_details.invoke(params)
+        elif intent == "book":
+            output = create_booking.invoke(params)
+    except Exception as e:
+        print(f"Tool execution error: {e}")
+        output = json.dumps({"error": str(e)})
         
     return {"tool_output": json.loads(output) if output else {}}
 
@@ -55,19 +74,13 @@ def generate_response(state: AgentState) -> dict:
     intent = state["intent"]
     tool_data = state["tool_output"]
     
-    # In a real app: response = llm.invoke(...)
-    # Mocking response generation based on intent
-    if intent == "search":
-        num_found = len(tool_data) if isinstance(tool_data, list) else 0
-        reply = f"I found {num_found} properties available for your dates. Here they are..."
-    elif intent == "details":
-        reply = f"Here are the details for {tool_data.get('title', 'the property')}..."
-    elif intent == "book":
-        reply = f"Great! Your booking (ID: {tool_data.get('booking_id')}) is confirmed."
-    else:
-        reply = "I've processed your request."
-        
-    return {"messages": [AIMessage(content=reply)]}
+    system_prompt = f"""You are the StayEase Agent. The user's intent was '{intent}'.
+The system has executed a tool and returned this raw data: {json.dumps(tool_data)}
+Write a friendly, helpful natural language response to the user based ONLY on this data. Do not make up information."""
+
+    response = llm.invoke([SystemMessage(content=system_prompt)] + state["messages"])
+    
+    return {"messages": [AIMessage(content=response.content)]}
 
 def escalate(state: AgentState) -> dict:
     """

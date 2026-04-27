@@ -2,13 +2,7 @@ import os
 import psycopg2
 from psycopg2.extras import RealDictCursor
 from contextlib import contextmanager
-
-# Assuming DATABASE_URL is set in environment (e.g., via config.py/.env)
-# Default for local testing if not set
-DEFAULT_DB_URL = "postgresql://postgres:postgres@localhost:5432/stayease"
-
-def get_db_url():
-    return os.getenv("DATABASE_URL", DEFAULT_DB_URL)
+from app.core.config import settings
 
 @contextmanager
 def get_db_connection():
@@ -18,7 +12,7 @@ def get_db_connection():
     """
     conn = None
     try:
-        conn = psycopg2.connect(get_db_url(), cursor_factory=RealDictCursor)
+        conn = psycopg2.connect(settings.database_url, cursor_factory=RealDictCursor)
         yield conn
     except Exception as e:
         print(f"Database connection error: {e}")

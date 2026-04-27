@@ -1,14 +1,14 @@
 from fastapi import FastAPI
-from app.routes import chat
+from app.api.v1.api import api_router
+from app.core.config import settings
 
 app = FastAPI(
-    title="StayEase AI Agent API",
+    title=settings.app_name,
     description="API for the StayEase conversational AI agent powered by LangGraph.",
     version="1.0.0"
 )
 
-# Include the chat routes
-app.include_router(chat.router, prefix="/api/chat", tags=["Chat"])
+app.include_router(api_router, prefix="/api")
 
 @app.get("/health")
 async def health_check():
