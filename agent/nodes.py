@@ -84,9 +84,12 @@ The user's classified intent is '{intent}'.
 The backend system returned this raw data or error: {json.dumps(tool_data)}
 
 Instructions:
-1. Write a natural, conversational response to the user based on this data.
-2. If the data contains an error about missing fields (like missing dates or location), DO NOT mention "the system", "validation errors", or technical jargon. Simply ask the user naturally for the missing information (e.g., "I'd love to help! Could you let me know what dates you're planning to check in and out?").
-3. Do not make up any property information that isn't provided in the data.
+1. Write a natural, conversational response based on the provided data.
+2. If information is missing, ask for it directly and concisely.
+3. CRITICAL: DO NOT explain why you are asking for information. 
+4. CRITICAL: DO NOT use phrases like "so I can help you better", "to provide accurate options", "that way I can...", or any other explanatory fluff. Just ask the question and stop.
+5. DO NOT mention "the system", "validation errors", or technical jargon.
+6. Keep the response to 1-2 short sentences.
 """
 
     response = llm.invoke([SystemMessage(content=system_prompt)] + state["messages"])
