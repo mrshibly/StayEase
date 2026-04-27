@@ -4,7 +4,6 @@ from langchain_groq import ChatGroq
 from agent.state import AgentState
 from agent.tools import search_available_properties, get_listing_details, create_booking
 from app.core.config import settings
-import os
 
 # Initialize real LLM
 llm = ChatGroq(model="llama-3.3-70b-versatile", api_key=settings.groq_api_key)
@@ -46,7 +45,6 @@ Format:
         "tool_input": params
     }
 
-from pydantic import ValidationError
 
 def execute_tool(state: AgentState) -> dict:
     """
