@@ -1,0 +1,9 @@
+venv/
+env/
+.env
+__pycache__/
+*.pyc
+.DS_Store
+.pytest_cache/
+INSTRUCTIONS.TXT
+MAILBODY AND ADDITIONAL INFO.TXT
